@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #101114;
+  --color-bg-secondary: #181A20;
+  --color-card: #20232B;
+  --color-card-hover: #262A34;
+  --color-accent: #6C8CFF;
+  --color-accent-hover: #7E9BFF;
+  --color-mint: #21C7A8;
+  --color-text: #F5F5F7;
+  --color-text-muted: #9296A3;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --font-sans: "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #101114;
+  color: #F5F5F7;
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+/* Custom sleek dark scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(146, 150, 163, 0.22);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(146, 150, 163, 0.42);
+}
+
+/* Subtle animations */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(33, 199, 168, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(33, 199, 168, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(33, 199, 168, 0);
+  }
+}
+
+.speaking-ring {
+  animation: pulse-ring 1.3s ease-out infinite;
+}
+
+.msg-highlight {
+  animation: flash-highlight 2s ease-out;
+}
+@keyframes flash-highlight {
+  0% {
+    background-color: rgba(108, 140, 255, 0.28);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+

@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+.env
+.env.local
+
+# Runtime data (never commit private data)
+database/*.db
+database/*.db-journal
+database/*.db-wal
+database/*.db-shm
+storage/
+backups/
+logs/
+config/localhub.config.json
+config/certs/
+config/setup-token.txt
+config/server.pid
+tests/artifacts/
+

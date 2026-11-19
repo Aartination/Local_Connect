@@ -1,0 +1,313 @@
+// LOCAL HUB database schema (SQLite via Prisma)
+// Enum-like fields are stored as strings; allowed values are documented inline
+// and enforced by the server's validation layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  displayName  String
+  passwordHash String
+  role         String    @default("PARTNER") // OWNER | ADMIN | PARTNER
+  bio          String    @default("")
+  statusText   String    @default("")
+  avatarFileId String?
+  isActive     Boolean   @default(true)
+  lastSeenAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions        Session[]
+  memberships     ConversationMember[]
+  messages        Message[]            @relation("MessageSender")
+  reactions       Reaction[]
+  files           File[]               @relation("FileUploader")
+  invitesCreated  Invitation[]         @relation("InviteCreator")
+  invitesUsed     Invitation[]         @relation("InviteUser")
+  announcements   Announcement[]
+  notesCreated    Note[]               @relation("NoteAuthor")
+  notesUpdated    Note[]               @relation("NoteEditor")
+  tasksCreated    Task[]               @relation("TaskCreator")
+  tasksAssigned   Task[]               @relation("TaskAssignee")
+  todoLists       TodoList[]
+  links           Link[]
+  activities      Activity[]
+  auditLogs       AuditLog[]
+  uploadSessions  UploadSession[]
+  pinnedMessages  Message[]            @relation("MessagePinner")
+  conversationsCreated Conversation[]  @relation("ConversationCreator")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  tokenHash    String   @unique
+  userId       String
+  userAgent    String   @default("")
+  ip           String   @default("")
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+  expiresAt    DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  role        String    @default("PARTNER") // ADMIN | PARTNER
+  note        String    @default("")
+  createdById String
+  usedById    String?
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  createdBy   User      @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  usedBy      User?     @relation("InviteUser", fields: [usedById], references: [id], onDelete: SetNull)
+}
+
+model Conversation {
+  id                String    @id @default(cuid())
+  type              String // DIRECT | GROUP | TEAM
+  name              String    @default("")
+  description       String    @default("")
+  directKey         String?   @unique // "<userA>:<userB>" sorted, only for DIRECT
+  onlyAdminsCanPost Boolean   @default(false)
+  membersCanInvite  Boolean   @default(true)
+  createdById       String?
+  lastMessageAt     DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         User?     @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  members           ConversationMember[]
+  messages          Message[]
+
+  @@index([lastMessageAt])
+}
+
+model ConversationMember {
+  id              String       @id @default(cuid())
+  conversationId  String
+  userId          String
+  role            String       @default("MEMBER") // ADMIN | MEMBER
+  joinedAt        DateTime     @default(now())
+  lastReadAt      DateTime     @default(now())
+  lastDeliveredAt DateTime     @default(now())
+  muted           Boolean      @default(false)
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String    @id @default(cuid())
+  conversationId String
+  senderId       String?
+  type           String    @default("TEXT") // TEXT | FILE | VOICE | SYSTEM | CALL
+  content        String    @default("")
+  meta           String    @default("{}") // JSON (call info, system info)
+  replyToId      String?
+  forwarded      Boolean   @default(false)
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  pinnedAt       DateTime?
+  pinnedById     String?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?               @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  replyTo      Message?            @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]           @relation("Replies")
+  pinnedBy     User?               @relation("MessagePinner", fields: [pinnedById], references: [id], onDelete: SetNull)
+  reactions    Reaction[]
+  attachments  MessageAttachment[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model MessageAttachment {
+  id        String  @id @default(cuid())
+  messageId String
+  fileId    String
+  position  Int     @default(0)
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  file      File    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, fileId])
+  @@index([fileId])
+}
+
+model File {
+  id           String    @id @default(cuid())
+  storedName   String    @unique // server-generated name, never derived from client input
+  relPath      String // path relative to storage root, e.g. images/2026/11/<storedName>
+  originalName String // sanitized display name only
+  ext          String
+  mime         String // verified by content sniffing, not by browser
+  size         Int
+  category     String // IMAGE | VIDEO | AUDIO | DOCUMENT | ARCHIVE | OTHER
+  scope        String    @default("CHAT") // CHAT | WORKSPACE | AVATAR
+  folder       String    @default("") // optional workspace folder label
+  description  String    @default("")
+  sha256       String    @default("")
+  thumbPath    String?
+  width        Int?
+  height       Int?
+  duration     Float?
+  waveform     String? // JSON array of peaks for voice messages
+  pinned       Boolean   @default(false) // pinned workspace document
+  uploaderId   String?
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+  uploader     User?     @relation("FileUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+  attachments  MessageAttachment[]
+
+  @@index([category])
+  @@index([scope])
+  @@index([createdAt])
+}
+
+model UploadSession {
+  id           String   @id @default(cuid())
+  userId       String
+  originalName String
+  size         Int
+  received     Int      @default(0)
+  purpose      String   @default("CHAT") // CHAT | WORKSPACE | AVATAR | VOICE
+  meta         String   @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  pinned    Boolean  @default(false)
+  authorId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+}
+
+model Note {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @default("")
+  color       String   @default("default")
+  pinned      Boolean  @default(false)
+  authorId    String?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  author      User?    @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  updatedBy   User?    @relation("NoteEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @default("")
+  status      String    @default("TODO") // TODO | IN_PROGRESS | REVIEW | DONE
+  priority    String    @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  position    Float     @default(0)
+  dueDate     DateTime?
+  assigneeId  String?
+  creatorId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+  assignee    User?     @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  creator     User?     @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model TodoList {
+  id        String     @id @default(cuid())
+  title     String
+  shared    Boolean    @default(true)
+  ownerId   String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  owner     User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items     TodoItem[]
+}
+
+model TodoItem {
+  id        String   @id @default(cuid())
+  listId    String
+  text      String
+  done      Boolean  @default(false)
+  position  Float    @default(0)
+  createdAt DateTime @default(now())
+  list      TodoList @relation(fields: [listId], references: [id], onDelete: Cascade)
+}
+
+model Link {
+  id          String   @id @default(cuid())
+  title       String
+  url         String
+  description String   @default("")
+  createdById String?
+  createdAt   DateTime @default(now())
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+}
+
+model Activity {
+  id         String   @id @default(cuid())
+  userId     String?
+  type       String // e.g. FILE_UPLOADED, TASK_CREATED, NOTE_UPDATED, MEMBER_JOINED
+  summary    String
+  entityType String   @default("")
+  entityId   String   @default("")
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  target    String   @default("")
+  details   String   @default("{}")
+  ip        String   @default("")
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+

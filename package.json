@@ -1,0 +1,37 @@
+{
+  "name": "local-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LOCAL HUB - private LAN communication & collaboration platform",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "build": "npm run build --workspace server && npm run build --workspace client",
+    "db:migrate": "npm run db:deploy --workspace server",
+    "start": "node server/dist/index.js",
+    "stop": "node scripts/stop.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "test:ui": "node tests/ui.mjs"
+  },
+  "engines": {
+    "node": ">=20.10"
+  },
+  "allowScripts": {
+    "@prisma/client": true,
+    "prisma": true,
+    "@prisma/engines": true,
+    "esbuild": true,
+    "sharp": true
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.1",
+    "socket.io-client": "^4.8.4"
+  }
+}
